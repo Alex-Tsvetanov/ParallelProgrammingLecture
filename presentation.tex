@@ -9,13 +9,19 @@
 \pgfplotsset{compat=1.18}
 \usetikzlibrary{arrows.meta, positioning, shapes}
 
-\usetheme{default}
-\usecolortheme{default}
+\usetheme{Berlin}
+\usecolortheme{beaver}
+\setbeamertemplate{headline}{}
 %gets rid of bottom navigation bars
 \setbeamertemplate{footline}[frame number]{}
 
 %gets rid of bottom navigation symbols
-\setbeamertemplate{navigation symbols}{}
+%\setbeamertemplate{navigation symbols}{}
+
+\setbeamercolor{item}{fg=alerted text.fg}
+%\setbeamercolor{navigation symbols}{fg=alerted text.fg}
+\setbeamercolor{structure}{fg=alerted text.fg}
+
 
 %gets rid of footer
 %will override 'frame number' instruction above
@@ -79,7 +85,7 @@
 
 \title{Модерни техники за паралелизъм и асинхронност в C++}
 \subtitle{Thread Pools, Coroutines и Publisher/Subscriber Pattern}
-\author{Алекс Цветанов, КСИ, ФКСТ}
+\author{Алекс Цветанов, КСИ, ФКСТ, 121222225}
 \institute{Паралелно програмиране}
 \date{\today}
 
@@ -168,11 +174,6 @@
     task/.style={rectangle, draw, fill=orange!30, minimum width=0.6cm, minimum height=0.4cm},
     thread/.style={rectangle, draw, fill=blue!20, minimum width=1.5cm, minimum height=0.6cm}]
     
-    % Arrows
-    \draw[-Latex, thick, red] (1,2.5) -- (t1.west);
-    \draw[-Latex, thick, red] (1,2.5) -- (t2.west);
-    \draw[-Latex, thick, red] (1,2.5) -- (t3.west);
-    
     % Task Queue
     \node[font=\bfseries] at (-2,3.5) {Task Queue};
     \draw[thick] (-4,2) rectangle (1,3);
@@ -189,6 +190,11 @@
     \node[thread] (t2) at (4,1.9) {Worker 2};
     \node[thread] (t3) at (4,1.1) {Worker 3};
     \node at (4,0.5) {...};
+    
+    % Arrows (must come after nodes are defined)
+    \draw[-Latex, thick, red] (1,2.5) -- (t1.west);
+    \draw[-Latex, thick, red] (1,2.5) -- (t2.west);
+    \draw[-Latex, thick, red] (1,2.5) -- (t3.west);
 \end{tikzpicture}
 \end{center}
 
@@ -388,6 +394,65 @@ class ThreadPool {
 \end{itemize}
 \end{frame}
 
+\begin{frame}[fragile]{Atomic Memory Ordering: Защо е важно?}
+\textbf{Файл:} \texttt{examples/07\_atomic\_memory\_ordering.cpp}
+
+\textbf{Проблем:} Compiler и CPU могат да пренареждат инструкции за оптимизация!
+
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+// Thread 1                    // Thread 2
+data = 42;                     while (!ready.load()) {}
+ready.store(true);             std::cout << data;  // Може да е неинициализиран!
+
+// Без правилен memory order, Thread 2 може да види ready=true 
+// ПРЕДИ data=42 заради reordering!
+\end{lstlisting}
+
+\textbf{Решение: Memory ordering constraints}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+// Thread 1 (Producer)
+data = 42;
+ready.store(true, std::memory_order_release);  // Гарантира: data пише ПРЕДИ ready
+
+// Thread 2 (Consumer)
+while (!ready.load(std::memory_order_acquire)) {}  // Синхронизира с release
+std::cout << data;  // Сигурно е data == 42!
+\end{lstlisting}
+
+\textbf{Правило:} Release-Acquire паир създава happens-before relationship
+\end{frame}
+
+\begin{frame}[fragile]{Memory Ordering: Relaxed vs Acquire/Release}
+\textbf{Файл:} \texttt{examples/07\_atomic\_memory\_ordering.cpp}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+std::atomic<int> counter{0};
+std::atomic<bool> done{false};
+
+void relaxed_increment() {
+    for (int i = 0; i < 1000; ++i) {
+        counter.fetch_add(1, std::memory_order_relaxed);  // Без синхронизация
+    }
+    done.store(true, std::memory_order_relaxed);
+}
+
+void acquire_release_increment() {
+    for (int i = 0; i < 1000; ++i) {
+        counter.fetch_add(1, std::memory_order_release);  // Гарантира видимост
+    }
+    done.store(true, std::memory_order_release);
+}
+
+// Main thread
+void wait_for_completion() {
+    while (!done.load(std::memory_order_acquire)) {}  // Синхронизира
+    std::cout << "Counter: " << counter.load(std::memory_order_acquire);
+}
+\end{lstlisting}
+
+\textbf{Relaxed:} Най-бързо, но без гаранции за ред \\
+\textbf{Acquire/Release:} Синхронизация при минимален overhead
+\end{frame}
+
 \begin{frame}[fragile]{Lock-Free Queue: Концепция}
 \begin{lstlisting}[basicstyle=\ttfamily\tiny]
 template<typename T>
@@ -484,6 +549,106 @@ public:
     }
     // enqueue(), destructor...
 };
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Thread Pool: Пълен пример с използване}
+\textbf{Файл:} \texttt{examples/01\_thread\_pool\_lock\_based.cpp}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+void cpu_intensive_task(int id, int duration_ms) {
+    std::cout << "Task " << id << " starting (duration: " 
+              << duration_ms << "ms)\n";
+    std::this_thread::sleep_for(std::chrono::milliseconds(duration_ms));
+    std::cout << "Task " << id << " completed\n";
+}
+
+int main() {
+    const size_t num_threads = std::thread::hardware_concurrency();
+    ThreadPool pool(num_threads);
+    
+    std::cout << "Creating thread pool with " << num_threads 
+              << " workers\n";
+    
+    // Enqueue 20 tasks
+    for (int i = 0; i < 20; ++i) {
+        pool.enqueue([i]() {
+            cpu_intensive_task(i, 100 + (i % 5) * 50);
+        });
+    }
+    
+    // Pool destructor waits for all tasks to complete
+    std::cout << "All tasks completed!\n";
+}
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Lock-Free Queue: Пълна имплементация}
+\textbf{Файл:} \texttt{examples/02\_lock\_free\_queue.cpp}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+template<typename T>
+class LockFreeQueue {
+private:
+    struct Node {
+        std::shared_ptr<T> data;
+        std::atomic<Node*> next;
+        Node() : next(nullptr) {}
+        explicit Node(T value) : data(std::make_shared<T>(std::move(value))), next(nullptr) {}
+    };
+    std::atomic<Node*> head;
+    std::atomic<Node*> tail;
+public:
+    void enqueue(T value) {
+        Node* new_node = new Node(std::move(value));
+        Node* old_tail = tail.load(std::memory_order_acquire);
+        while (true) {
+            Node* null_ptr = nullptr;
+            if (old_tail->next.compare_exchange_weak(
+                null_ptr, new_node,
+                std::memory_order_release,
+                std::memory_order_acquire)) {
+                break;
+            }
+            old_tail = old_tail->next.load(std::memory_order_acquire);
+        }
+        tail.compare_exchange_strong(old_tail, new_node, std::memory_order_release, std::memory_order_acquire);
+    }
+};
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Lock-Free Queue: Тестване с множество нишки}
+\textbf{Файл:} \texttt{examples/02\_lock\_free\_queue.cpp}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+void producer(LockFreeQueue<int>& queue, int id, int count) {
+    for (int i = 0; i < count; ++i) {
+        int value = id * 1000 + i;
+        queue.enqueue(value);
+        std::cout << "Producer " << id << " enqueued: " << value << "\n";
+    }
+}
+
+void consumer(LockFreeQueue<int>& queue, int id, int count) {
+    int consumed = 0;
+    while (consumed < count) {
+        auto value = queue.dequeue();
+        if (value) {
+            std::cout << "Consumer " << id << " dequeued: " << *value << "\n";
+            consumed++;
+        }
+    }
+}
+
+int main() {
+    LockFreeQueue<int> queue;
+    std::vector<std::thread> threads;
+    
+    // 3 producers, 3 consumers
+    for (int i = 0; i < 3; ++i) {
+        threads.emplace_back(producer, std::ref(queue), i, 5);
+        threads.emplace_back(consumer, std::ref(queue), i, 5);
+    }
+    for (auto& t : threads) t.join();
+}
 \end{lstlisting}
 \end{frame}
 
@@ -810,17 +975,15 @@ Task<void> level1() {
 \subsection{Примерна имплементация}
 
 \begin{frame}[fragile]{Проста Coroutine имплементация (C++20)}
+\textbf{Файл:} \texttt{examples/03\_basic\_coroutine.cpp}
 \begin{lstlisting}[basicstyle=\ttfamily\tiny]
 #include <coroutine>
 #include <iostream>
-
 template<typename T>
 struct Task {
     struct promise_type {
         T value;
-        Task get_return_object() {
-            return Task{std::coroutine_handle<promise_type>::from_promise(*this)};
-        }
+        Task get_return_object() { return Task{std::coroutine_handle<promise_type>::from_promise(*this)}; }
         std::suspend_never initial_suspend() { return {}; }
         std::suspend_always final_suspend() noexcept { return {}; }
         void unhandled_exception() { std::terminate(); }
@@ -844,13 +1007,46 @@ int main() {
 \end{lstlisting}
 \end{frame}
 
+\begin{frame}[fragile]{Coroutine: Custom Awaitable}
+\textbf{Файл:} \texttt{examples/03\_basic\_coroutine.cpp}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+// Awaitable за контрол на suspend/resume поведение
+struct Suspend {
+    bool await_ready() const noexcept { 
+        return false;  // Винаги suspend
+    }
+    
+    void await_suspend(std::coroutine_handle<>) const noexcept {
+        std::cout << "  [Suspended]\n";
+    }
+    
+    void await_resume() const noexcept {
+        std::cout << "  [Resumed]\n";
+    }
+};
+
+Task<int> compute_async(int a, int b) {
+    std::cout << "Starting computation with " << a << " and " << b << "\n";
+    
+    co_await Suspend{};  // Първо suspend
+    std::cout << "After first suspension\n";
+    
+    int intermediate = a + b;
+    co_await Suspend{};  // Второ suspend
+    
+    int result = intermediate * 2;
+    co_return result;
+}
+\end{lstlisting}
+\end{frame}
+
 \begin{frame}[fragile]{Реален пример: Async I/O с Coroutines}
+\textbf{Файл:} \texttt{examples/09\_coroutine\_async\_io.cpp}
 \begin{lstlisting}[basicstyle=\ttfamily\tiny]
 Task<std::string> async_read_file(const std::string& filename) {
     // Simulate async file reading
     co_await async_open(filename);
     std::string content;
-    
     while (true) {
         auto chunk = co_await async_read_chunk();
         if (chunk.empty()) break;
@@ -860,24 +1056,78 @@ Task<std::string> async_read_file(const std::string& filename) {
     co_await async_close();
     co_return content;
 }
-
 Task<void> process_files() {
     // Множество паралелни четения (но в една нишка!)
     auto file1 = async_read_file("data1.txt");
     auto file2 = async_read_file("data2.txt");
     auto file3 = async_read_file("data3.txt");
-    
     // Чакаме всички
     auto content1 = co_await file1;
     auto content2 = co_await file2;
     auto content3 = co_await file3;
-    
     // Обработка...
     std::cout << "Total size: " << content1.size() + content2.size() + content3.size();
 }
 \end{lstlisting}
 
 \textbf{Предимство:} Хиляди едновременни I/O операции без хиляди threads!
+\end{frame}
+
+\begin{frame}[fragile]{Coroutine: Event Loop и Async Task}
+\textbf{Файл:} \texttt{examples/09\_coroutine\_async\_io.cpp}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+class EventLoop {
+    std::queue<std::coroutine_handle<>> ready_queue;
+    std::mutex queue_mutex;
+public:
+    void schedule(std::coroutine_handle<> handle) {
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        ready_queue.push(handle);
+    }
+    void run() {
+        while (true) {
+            std::coroutine_handle<> handle;
+            {
+                std::lock_guard<std::mutex> lock(queue_mutex);
+                if (ready_queue.empty()) break;
+                handle = ready_queue.front();
+                ready_queue.pop();
+            }
+            if (!handle.done()) handle.resume();
+        }
+    }
+};
+\end{lstlisting}
+
+\textbf{Концепция:} Event loop управлява coroutines – suspend и resume без OS threads!
+\end{frame}
+
+\begin{frame}[fragile]{Coroutine: AsyncIO Awaitable}
+\textbf{Файл:} \texttt{examples/09\_coroutine\_async\_io.cpp}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+// Awaitable за симулиране на async I/O
+struct AsyncIO {
+    std::string filename;
+    int delay_ms;
+    bool await_ready() { return false; }  // Винаги suspend
+    void await_suspend(std::coroutine_handle<> h) {
+        // Simulate async operation
+        std::thread([h, delay = delay_ms]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+            EventLoop::instance().schedule(h);  // Resume след завършване
+        }).detach();
+    }
+    std::string await_resume() {
+        return "Content from " + filename;
+    }
+};
+AsyncTask<std::string> read_file_async(const std::string& file) {
+    std::cout << "Starting read: " << file << "\n";
+    auto content = co_await AsyncIO{file, 100};  // Suspend тук!
+    std::cout << "Completed read: " << file << "\n";
+    co_return content;
+}
+\end{lstlisting}
 \end{frame}
 
 \section{Publisher/Subscriber Pattern}
@@ -1073,7 +1323,7 @@ Task<void> process_files() {
 
 \begin{frame}{Предизвикателство 3: Ordering}
 
-\textbf{Проблем:} Запазване на реда на съобщенията при паралелна обработка
+\textbf{Проблем:} Запазване на реда на съобщенията при паралелна обработка\\
 
 \begin{lstlisting}[basicstyle=\ttfamily\tiny, language=C++]
 // Publisher изпраща: Message 1, 2, 3
@@ -1097,16 +1347,15 @@ publisher.publish(msg3);
 \subsection{Примерна имплементация}
 
 \begin{frame}[fragile]{Проста Pub/Sub имплементация}
+\textbf{Файл:} \texttt{examples/04\_pubsub\_synchronous.cpp}
 \begin{lstlisting}[basicstyle=\ttfamily\tiny]
 template<typename Event>
 class EventBroker {
     using Subscriber = std::function<void(const Event&)>;
     using SubscriberId = size_t;
-    
     std::unordered_map<SubscriberId, Subscriber> subscribers;
     std::mutex mutex;
     SubscriberId next_id = 0;
-
 public:
     SubscriberId subscribe(Subscriber&& callback) {
         std::lock_guard<std::mutex> lock(mutex);
@@ -1114,12 +1363,10 @@ public:
         subscribers[id] = std::move(callback);
         return id;
     }
-    
     void unsubscribe(SubscriberId id) {
         std::lock_guard<std::mutex> lock(mutex);
         subscribers.erase(id);
     }
-
     void publish(const Event& event) {
         std::lock_guard<std::mutex> lock(mutex);
         for (auto& [id, subscriber] : subscribers) {
@@ -1132,7 +1379,38 @@ public:
 \textbf{Проблем:} publish() блокира до обработка на всички subscribers!
 \end{frame}
 
+\begin{frame}[fragile]{Pub/Sub Synchronous: Smart Home пример}
+\textbf{Файл:} \texttt{examples/04\_pubsub\_synchronous.cpp}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+struct TemperatureEvent { double temperature; std::string sensor_id; };
+class HeatingSystem {
+public:
+    void on_temperature(const TemperatureEvent& event) {
+        std::cout << "  [HeatingSystem] Temperature from " << event.sensor_id 
+                  << ": " << event.temperature << " C";
+        if (event.temperature < 18.0) std::cout << " - HEATING ON";
+        else if (event.temperature > 24.0) std::cout << " - HEATING OFF";
+        std::cout << "\n";
+    }
+};
+int main() {
+    EventBroker<TemperatureEvent> broker;
+    HeatingSystem heating;
+    MobileApp app;
+    DataLogger logger;
+    // Subscribe
+    broker.subscribe([&](const auto& e) { heating.on_temperature(e); });
+    broker.subscribe([&](const auto& e) { app.on_temperature(e); });
+    broker.subscribe([&](const auto& e) { logger.log_temperature(e); });
+    // Publish events
+    broker.publish({20.5, "Living Room"});
+    broker.publish({16.2, "Bedroom"});
+}
+\end{lstlisting}
+\end{frame}
+
 \begin{frame}[fragile]{Асинхронна имплементация с Thread Pool}
+\textbf{Файл:} \texttt{examples/05\_pubsub\_async\_threadpool.cpp}
 \begin{lstlisting}[basicstyle=\ttfamily\tiny]
 template<typename Event>
 class AsyncEventBroker {
@@ -1140,16 +1418,13 @@ class AsyncEventBroker {
     std::vector<Subscriber> subscribers;
     ThreadPool pool;
     std::mutex mutex;
-
 public:
     AsyncEventBroker(size_t num_threads = std::thread::hardware_concurrency())
         : pool(num_threads) {}
-    
     void subscribe(Subscriber&& callback) {
         std::lock_guard<std::mutex> lock(mutex);
         subscribers.push_back(std::move(callback));
     }
-
     void publish(const Event& event) {
         std::lock_guard<std::mutex> lock(mutex);
         // Всеки subscriber се обработва в отделна задача
@@ -1163,6 +1438,99 @@ public:
 \end{lstlisting}
 
 \textbf{Предимство:} Non-blocking publish(), паралелна обработка!
+\end{frame}
+
+\begin{frame}[fragile]{Pub/Sub с Thread Pool: Практически пример}
+\textbf{Файл:} \texttt{examples/05\_pubsub\_async\_threadpool.cpp}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+struct StockPrice { std::string symbol; double price; };
+int main() {
+    ThreadPool pool(4);
+    AsyncEventBroker<StockPrice> broker(pool);
+    // Subscribe различни компоненти
+    broker.subscribe([](const StockPrice& event) {
+        std::cout << "[RiskEngine] Processing " << event.symbol 
+                  << " @ " << event.price << "\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    });
+    broker.subscribe([](const StockPrice& event) {
+        std::cout << "[TradingStrategy] Analyzing " << event.symbol 
+                  << " @ " << event.price << "\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    });
+    // Publish 10 events
+    for (int i = 0; i < 10; ++i) {
+        broker.publish({"AAPL", 150.0 + i});
+        std::cout << "[Publisher] Published event " << i << "\n";
+    }
+}
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Lock-Free Pub/Sub с RCU Pattern}
+\textbf{Файл:} \texttt{examples/06\_pubsub\_lockfree\_rcu.cpp}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+template<typename Event>
+class RCUEventBroker {
+    struct SubscriberNode {
+        std::function<void(const Event&)> callback;
+        std::shared_ptr<SubscriberNode> next;
+    };
+    std::shared_ptr<SubscriberNode> head;
+public:
+    // Lock-free subscription using Compare-And-Swap
+    void subscribe(std::function<void(const Event&)> callback) {
+        auto new_node = std::make_shared<SubscriberNode>();
+        new_node->callback = std::move(callback);
+        auto old_head = std::atomic_load(&head);
+        do {
+            new_node->next = old_head;
+        } while (!std::atomic_compare_exchange_weak(
+            &head, &old_head, new_node));
+    }
+    // Wait-free publish (read-only operation)
+    void publish(const Event& event) {
+        auto node = std::atomic_load(&head);
+        while (node) {
+            node->callback(event);
+            node = node->next;
+        }
+    }
+};
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{RCU Pattern: Тестване на конкурентност}
+\textbf{Файл:} \texttt{examples/06\_pubsub\_lockfree\_rcu.cpp}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+struct SensorReading { int sensor_id; double value; long timestamp; };
+void subscriber_thread(RCUEventBroker<SensorReading>& broker, int id, int count) {
+    for (int i = 0; i < count; ++i) {
+        broker.subscribe([id, i](const SensorReading& event) {
+            std::cout << "[Subscriber " << id << "-" << i 
+                      << "] Sensor " << event.sensor_id 
+                      << ": " << event.value << "\n";
+        });
+    }
+}
+void publisher_thread(RCUEventBroker<SensorReading>& broker, int id, int count) {
+    for (int i = 0; i < count; ++i) {
+        broker.publish({id, 25.0 + i * 0.5, 
+                       std::chrono::system_clock::now().time_since_epoch().count()});
+    }
+}
+int main() {
+    RCUEventBroker<SensorReading> broker;
+    std::vector<std::thread> threads;
+    // 5 concurrent subscribers
+    for (int i = 0; i < 5; ++i)
+        threads.emplace_back(subscriber_thread, std::ref(broker), i, 2);
+    // 3 concurrent publishers
+    for (int i = 0; i < 3; ++i)
+        threads.emplace_back(publisher_thread, std::ref(broker), i, 10);
+    for (auto& t : threads) t.join();
+}
+\end{lstlisting}
 \end{frame}
 
 \subsection{Паралелизирано разпращане}
@@ -1179,9 +1547,9 @@ public:
     \node[rectangle, draw, fill=yellow!30] (broker) at (0,1.8) {Broker (mutex)};
     
     \draw[-Latex, thick] (pub) -- (broker);
-    \draw[-Latex, thick] (broker.east) -- ++(1,0) |- (broker.east) -- ++(1.5,1.0) node[right] {\tiny Sub1};
-    \draw[-Latex, thick] (broker.east) -- ++(1,0) |- (broker.east) -- ++(1.5,0.0) node[right] {\tiny Sub2};
-    \draw[-Latex, thick] (broker.east) -- ++(1,0) |- (broker.east) -- ++(1.5,-1.0) node[right] {\tiny Sub3};
+    \draw[-Latex, thick] (broker) -- ++(3.0,1.2) node[right] {\tiny Sub1};
+    \draw[-Latex, thick] (broker) -- ++(3.0,0.0) node[right] {\tiny Sub2};
+    \draw[-Latex, thick] (broker) -- ++(3.0,-1.2) node[right] {\tiny Sub3};
     \node[below, red] at (0,0.8) {\tiny Serialization!};
     
     % Optimized approach
@@ -1190,9 +1558,9 @@ public:
     \node[rectangle, draw, fill=green!30] (broker2) at (7,1.8) {Lock-free Broker};
     
     \draw[-Latex, thick, green!60!black] (pub2) -- (broker2);
-    \draw[-Latex, thick, green!60!black] (broker2.east) -- ++(1.5,0) |- (broker2.east) -- ++(2.0,1.0) node[right] {\tiny Sub1};
-    \draw[-Latex, thick, green!60!black] (broker2.east) -- ++(1.5,0) |- (broker2.east) -- ++(2.0,0.0) node[right] {\tiny Sub2};
-    \draw[-Latex, thick, green!60!black] (broker2.east) -- ++(1.5,0) |- (broker2.east) -- ++(2.0,-1.0) node[right] {\tiny Sub3};
+    \draw[-Latex, thick, green!60!black] (broker2) -- ++(3.5,1.2) node[right] {\tiny Sub1};
+    \draw[-Latex, thick, green!60!black] (broker2) -- ++(3.5,0.0) node[right] {\tiny Sub2};
+    \draw[-Latex, thick, green!60!black] (broker2) -- ++(3.5,-1.2) node[right] {\tiny Sub3};
     \node[below, green!60!black] at (7,0.8) {\tiny Паралелно!};
 \end{tikzpicture}
 \end{center}
@@ -1399,6 +1767,40 @@ bool Publisher::emit_async(std::execution::parallel_policy policy, Args&&... arg
 \end{columns}
 \end{frame}
 
+\begin{frame}[fragile]{Паралелни алгоритми: oneTBB пример}
+\textbf{Файл:} \texttt{examples/08\_onetbb\_examples.cpp}
+
+\textbf{oneTBB (Threading Building Blocks):} High-level паралелни алгоритми
+
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+#include <tbb/parallel_for.h>
+#include <tbb/parallel_reduce.h>
+#include <vector>
+void parallel_for_example() {
+    std::vector<int> data(1000000);
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, data.size()), [&](const tbb::blocked_range<size_t>& r) {
+            for (size_t i = r.begin(); i < r.end(); ++i) {
+                data[i] = i * i;  // Всеки елемент се обработва паралелно
+            }
+        }
+    );
+}
+int parallel_reduce_example() {
+    std::vector<int> data(1000000, 1);
+    // Паралелно сумиране
+    int sum = tbb::parallel_reduce(
+        tbb::blocked_range<size_t>(0, data.size()), 0,  // Начална стойност
+        [&](const tbb::blocked_range<size_t>& r, int init) {
+            for (size_t i = r.begin(); i < r.end(); ++i)
+                init += data[i];
+            return init;
+        }, std::plus<int>()  // Combine функция
+    );
+    return sum;
+}
+\end{lstlisting}
+\end{frame}
+
 \section{Комбиниране на техниките}
 
 \begin{frame}{Интеграция: Thread Pool + Coroutines + Pub/Sub}
@@ -1461,7 +1863,139 @@ Mixed workload & Hybrid & Комбинира силни страни \\
 \end{enumerate}
 \end{frame}
 
+\begin{frame}[fragile]{Hybrid Approach: Lock-Free SPSC Queue}
+\textbf{Файл:} \texttt{examples/10\_hybrid\_approach.cpp}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+template<typename T, size_t Size = 1024>
+class SPSCQueue {
+    struct alignas(64) {  // Cache line alignment
+        std::atomic<size_t> value{0};
+    } head, tail;
+    T buffer[Size];
+public:
+    bool enqueue(const T& item) {
+        size_t current_tail = tail.value.load(std::memory_order_relaxed);
+        size_t next_tail = (current_tail + 1) % Size;
+        if (next_tail == head.value.load(std::memory_order_acquire))
+            return false;  // Queue full
+        buffer[current_tail] = item;
+        tail.value.store(next_tail, std::memory_order_release);
+        return true;
+    }
+    bool dequeue(T& item) {
+        size_t current_head = head.value.load(std::memory_order_relaxed);
+        if (current_head == tail.value.load(std::memory_order_acquire))
+            return false;  // Queue empty
+        item = buffer[current_head];
+        head.value.store((current_head + 1) % Size, std::memory_order_release);
+        return true;
+    }
+};
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Hybrid: Lock-Free Thread Pool с Per-Worker Queues}
+\textbf{Файл:} \texttt{examples/10\_hybrid\_approach.cpp}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+class Worker {
+    std::thread thread;
+    SPSCQueue<std::function<void()>> tasks;  // Lock-free queue!
+    std::atomic<bool> running{true};
+    void run() {
+        std::function<void()> task;
+        while (running.load(std::memory_order_acquire)) {
+            if (tasks.dequeue(task))
+                task();
+            else
+                std::this_thread::yield();
+        }
+    }
+public:
+    Worker() : thread(&Worker::run, this) {}
+    bool submit(std::function<void()>&& task) {
+        return tasks.enqueue(task);
+    }
+};
+class LockFreeThreadPool {
+    std::vector<std::unique_ptr<Worker>> workers;
+    std::atomic<size_t> next_worker{0};
+public:
+    void submit(std::function<void()>&& task) {
+        size_t worker_id = next_worker.fetch_add(1) % workers.size();
+        workers[worker_id]->submit(std::move(task));
+    }
+};
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Hybrid System: Интеграция на всичко}
+\textbf{Файл:} \texttt{examples/10\_hybrid\_approach.cpp}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+struct Task { int id; std::string data; };
+
+int main() {
+    LockFreeThreadPool pool(4);  // 4 workers с lock-free queues
+    RCUEventBroker<Task> broker; // Lock-free pub/sub
+    
+    // Subscribe processing units
+    broker.subscribe([&pool](const Task& task) {
+        pool.submit([task]() {
+            // CPU-intensive обработка в thread pool
+            std::cout << "[Worker] Processing task " << task.id << "\n";
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        });
+    });
+    
+    // High-throughput event generation
+    std::thread publisher([&broker]() {
+        for (int i = 0; i < 1000; ++i) {
+            broker.publish({i, "Data-" + std::to_string(i)});
+        }
+    });
+    
+    publisher.join();
+    std::this_thread::sleep_for(std::chrono::seconds(2));  // Wait for processing
+    std::cout << "All tasks processed!\n";
+}
+\end{lstlisting}
+
+\textbf{Предимства:} Wait-free publish + Lock-free queues + Паралелна обработка!
+\end{frame}
+
 \section{Заключение}
+
+\begin{frame}{Преглед на примерите}
+\textbf{Всички примери са налични в папка \texttt{examples/}}
+
+\begin{table}
+\centering
+\footnotesize
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Пример} & \textbf{Секция в лекцията} \\
+\hline
+01\_thread\_pool\_lock\_based.cpp & Thread Pools – Lock-Based \\
+02\_lock\_free\_queue.cpp & Lock-Free Queues \\
+03\_basic\_coroutine.cpp & Coroutines – Basic \\
+04\_pubsub\_synchronous.cpp & Publisher/Subscriber – Sync \\
+05\_pubsub\_async\_threadpool.cpp & Publisher/Subscriber – Async \\
+06\_pubsub\_lockfree\_rcu.cpp & Publisher/Subscriber – Lock-Free \\
+07\_atomic\_memory\_ordering.cpp & Lock-Free – Memory Ordering \\
+08\_onetbb\_examples.cpp & Паралелни алгоритми – oneTBB \\
+09\_coroutine\_async\_io.cpp & Coroutines – Async I/O \\
+10\_hybrid\_approach.cpp & Комбиниране на техниките \\
+\hline
+\end{tabular}
+\end{table}
+
+\vspace{0.3cm}
+\textbf{Компилиране:}
+\begin{itemize}
+    \item \texttt{cd examples \&\& mkdir build \&\& cd build}
+    \item \texttt{cmake .. \&\& cmake $-$$-$build .}
+    \item Всеки пример е отделен executable
+\end{itemize}
+\end{frame}
 
 \begin{frame}{Обобщение}
 \textbf{Какво научихме днес:}
@@ -1531,22 +2065,22 @@ Mixed workload & Hybrid & Комбинира силни страни \\
     \column{0.45\textwidth}
         \textbf{Книги:}
         \begin{itemize}
-            \item "C++ Concurrency in Action"\ – Anthony Williams
-            \item "The Art of Multiprocessor Programming"\ – Herlihy \& Shavit
-            \item "Programming with POSIX Threads"\ – David Butenhof
+            \item "C++ Concurrency in Action" – Anthony Williams
+            \item "The Art of Multiprocessor Programming" – Herlihy \& Shavit
+            \item "Programming with POSIX Threads" – David Butenhof
         \end{itemize}
         \textbf{Papers \& Talks:}
         \begin{itemize}
-            \item "Lock-Free Data Structures"\ – Michael \& Scott
-            \item "RCU (Read-Copy-Update)"\ – McKenney
-            \item "Optimizing Asynchronous Event Dispatch in Modern C++ Publish/Subscribe Systems"\ – Alex Tsvetanov
+            \item "Lock-Free Data Structures" – Michael \& Scott
+            \item "RCU (Read-Copy-Update)" – McKenney
+            \item "Optimizing Asynchronous Event Dispatch in Modern C++ Publish/Subscribe Systems" – Alex Tsvetanov
         \end{itemize}
     \column{0.45\textwidth}
         \textbf{Lock-Free Queue имплементации и talks:}
         \begin{itemize}
-            \item \href{https://www.youtube.com/watch?v=bjz_bMNNWRk}{"User API and C++ Implementation of MPMC Lock Free Queue"}\ – Erez Strauss, CppCon 2024
-            \item \href{https://www.youtube.com/watch?v=_qaKkHuHYE0}{"Building a Lock-free MPMC Queue for Tcmalloc"}\ – Matt Kulukundis, CppCon 2021
-            \item \href{https://github.com/DNedic/lockfree}{github.com/DNedic/lockfree}\ – Djordje Nedic, Pablo Duboue, Lennart Schierling
+            \item \href{https://www.youtube.com/watch?v=bjz_bMNNWRk}{"User API and C++ Implementation of MPMC Lock Free Queue"} – Erez Strauss, CppCon 2024
+            \item \href{https://www.youtube.com/watch?v=_qaKkHuHYE0}{"Building a Lock-free MPMC Queue for Tcmalloc"} – Matt Kulukundis, CppCon 2021
+            \item \href{https://github.com/DNedic/lockfree}{github.com/DNedic/lockfree} – Djordje Nedic, Pablo Duboue, Lennart Schierling
         \end{itemize}
         
         \textbf{Online ресурси:}
@@ -1567,7 +2101,7 @@ Mixed workload & Hybrid & Комбинира силни страни \\
 
 \vspace{0.5cm}
 \small
-Контакт: atsvetanov@tu-sofia.bg | GitHub: github.com/Alex-Tsvetanov
+Контакт: atsvetanov{\texttt{@}}tu-sofia.bg | GitHub: github.com/Alex-Tsvetanov
 \end{frame}
 
 \end{document}
