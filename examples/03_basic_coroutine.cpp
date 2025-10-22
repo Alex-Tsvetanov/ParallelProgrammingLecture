@@ -5,6 +5,7 @@
 #include <coroutine>
 #include <iostream>
 #include <string>
+#include <sstream>
 
 // Simple Task coroutine type
 template<typename T>
@@ -65,28 +66,52 @@ struct Task {
 struct Suspend {
     bool await_ready() const noexcept { return false; }
     void await_suspend(std::coroutine_handle<>) const noexcept {
-        std::cout << "  [Suspended]\n";
+        std::stringstream ss;
+        ss << "  [Suspended]\n";
+        std::cout << ss.str() << std::flush;
     }
     void await_resume() const noexcept {
-        std::cout << "  [Resumed]\n";
+        std::stringstream ss;
+        ss << "  [Resumed]\n";
+        std::cout << ss.str() << std::flush;
     }
 };
 
 // Example coroutine function
 Task<int> compute_async(int a, int b) {
-    std::cout << "Starting computation with " << a << " and " << b << "\n";
+    {
+        std::stringstream ss;
+        ss << "Starting computation with " << a << " and " << b << "\n";
+        std::cout << ss.str() << std::flush;
+    }
     
     co_await Suspend{};
-    std::cout << "After first suspension\n";
+    {
+        std::stringstream ss;
+        ss << "After first suspension\n";
+        std::cout << ss.str() << std::flush;
+    }
     
     int intermediate = a + b;
-    std::cout << "Intermediate result: " << intermediate << "\n";
+    {
+        std::stringstream ss;
+        ss << "Intermediate result: " << intermediate << "\n";
+        std::cout << ss.str() << std::flush;
+    }
     
     co_await Suspend{};
-    std::cout << "After second suspension\n";
+    {
+        std::stringstream ss;
+        ss << "After second suspension\n";
+        std::cout << ss.str() << std::flush;
+    }
     
     int result = intermediate * 2;
-    std::cout << "Final computation complete\n";
+    {
+        std::stringstream ss;
+        ss << "Final computation complete\n";
+        std::cout << ss.str() << std::flush;
+    }
     
     co_return result;
 }
@@ -94,30 +119,66 @@ Task<int> compute_async(int a, int b) {
 // Coroutine that demonstrates local variable safety
 Task<std::string> string_coroutine() {
     std::string local_data = "This is SAFE - stored in coroutine frame";
-    std::cout << "Created local string: " << local_data << "\n";
+    {
+        std::stringstream ss;
+        ss << "Created local string: " << local_data << "\n";
+        std::cout << ss.str() << std::flush;
+    }
     
     co_await Suspend{};
     
     // local_data is still valid here because it's in the coroutine frame
-    std::cout << "After suspension, local_data is still: " << local_data << "\n";
+    {
+        std::stringstream ss;
+        ss << "After suspension, local_data is still: " << local_data << "\n";
+        std::cout << ss.str() << std::flush;
+    }
     
     co_return local_data + " (returned)";
 }
 
 int main() {
-    std::cout << "=== Basic Coroutine Example ===\n\n";
+    {
+        std::stringstream ss;
+        ss << "=== Basic Coroutine Example ===\n\n";
+        std::cout << ss.str() << std::flush;
+    }
     
-    std::cout << "--- Example 1: Compute Async ---\n";
+    {
+        std::stringstream ss;
+        ss << "--- Example 1: Compute Async ---\n";
+        std::cout << ss.str() << std::flush;
+    }
     auto task1 = compute_async(5, 10);
-    std::cout << "Task created, coroutine started\n";
+    {
+        std::stringstream ss;
+        ss << "Task created, coroutine started\n";
+        std::cout << ss.str() << std::flush;
+    }
     int result = task1.get();
-    std::cout << "Result: " << result << "\n\n";
+    {
+        std::stringstream ss;
+        ss << "Result: " << result << "\n\n";
+        std::cout << ss.str() << std::flush;
+    }
     
-    std::cout << "--- Example 2: String Coroutine (Local Variable Safety) ---\n";
+    {
+        std::stringstream ss;
+        ss << "--- Example 2: String Coroutine (Local Variable Safety) ---\n";
+        std::cout << ss.str() << std::flush;
+    }
     auto task2 = string_coroutine();
-    std::cout << "Task created\n";
+    {
+        std::stringstream ss;
+        ss << "Task created\n";
+        std::cout << ss.str() << std::flush;
+    }
     std::string str_result = task2.get();
-    std::cout << "Result: " << str_result << "\n";
+    {
+        std::stringstream ss;
+        ss << "Result: " << str_result << "\n";
+        std::cout << ss.str() << std::flush;
+    }
     
     return 0;
 }

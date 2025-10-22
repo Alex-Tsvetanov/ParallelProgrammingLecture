@@ -6,6 +6,7 @@
 #include <memory>
 #include <functional>
 #include <iostream>
+#include <sstream>
 #include <thread>
 #include <vector>
 #include <chrono>
@@ -24,24 +25,34 @@ private:
     };
 
     // Head of the subscriber linked list
-    std::atomic<std::shared_ptr<SubscriberNode>> head;
+    // Using shared_ptr directly with atomic operations for MSVC compatibility
+    std::shared_ptr<SubscriberNode> head;
 
 public:
     RCUEventBroker() : head(nullptr) {}
+    RCUEventBroker(const RCUEventBroker& other) 
+        : head(std::atomic_load_explicit(&other.head, std::memory_order_acquire)) {} 
+    RCUEventBroker& operator=(const RCUEventBroker& other) {
+        std::atomic_store_explicit(&head, 
+            std::atomic_load_explicit(&other.head, std::memory_order_acquire),
+            std::memory_order_release);
+        return *this;
+    }
+    ~RCUEventBroker() = default;
 
     // Lock-free subscription using Compare-And-Swap
     void subscribe(Callback callback) {
         auto new_node = std::make_shared<SubscriberNode>(std::move(callback));
         
         // Load current head
-        auto old_head = head.load(std::memory_order_acquire);
+        auto old_head = std::atomic_load_explicit(&head, std::memory_order_acquire);
         
         do {
             // Link new node to current head
             new_node->next = old_head;
             // Try to make new_node the new head
-        } while (!head.compare_exchange_weak(
-            old_head, new_node,
+        } while (!std::atomic_compare_exchange_weak_explicit(
+            &head, &old_head, new_node,
             std::memory_order_release,
             std::memory_order_acquire));
         
@@ -51,7 +62,7 @@ public:
     // Wait-free publish (read-only operation)
     void publish(const Event& event) {
         // Lock-free read of subscriber list
-        auto node = head.load(std::memory_order_acquire);
+        auto node = std::atomic_load_explicit(&head, std::memory_order_acquire);
         
         int count = 0;
         while (node) {
@@ -67,7 +78,7 @@ public:
 
     // Count subscribers (for demonstration)
     size_t count_subscribers() const {
-        auto node = head.load(std::memory_order_acquire);
+        auto node = std::atomic_load_explicit(&head, std::memory_order_acquire);
         size_t count = 0;
         while (node) {
             count++;

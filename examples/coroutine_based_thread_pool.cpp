@@ -194,15 +194,20 @@ private:
 // Example usage (put this in your .cpp to test)
 //--------------------------------------------------------------
 #include <iostream>
+#include <sstream>
 
 Task stepper(ThreadPool& pool, int id, int steps, int work_ms) {
   // On spawn(), we start suspended and only run when a worker resumes us.
   for (int i = 0; i < steps; ++i) {
     // "Do work"
     std::this_thread::sleep_for(std::chrono::milliseconds(work_ms));
-    std::cout << "[task " << id << "] step " << (i+1) << "/" << steps << "\n";
+    {
+      std::stringstream ss;
+      ss << "[task " << id << "] step " << (i+1) << "/" << steps << "\n";
+      std::cout << ss.str() << std::flush;
+    }
 
-    // Yield back to the pool so other work can run; we’ll be re-scheduled later
+    // Yield back to the pool so other work can run; we'll be re-scheduled later
     co_await pool.yield_once();
   }
   // return_void(): completion will be detected by the worker and the coroutine destroyed
@@ -219,5 +224,9 @@ int main() {
   // Block until all tasks finish
   pool.wait_idle();
 
-  std::cout << "All tasks done.\n";
+  {
+    std::stringstream ss;
+    ss << "All tasks done.\n";
+    std::cout << ss.str() << std::flush;
+  }
 }

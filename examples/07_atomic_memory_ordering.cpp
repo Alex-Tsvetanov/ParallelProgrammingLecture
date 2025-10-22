@@ -5,8 +5,10 @@
 #include <atomic>
 #include <thread>
 #include <iostream>
+#include <sstream>
 #include <vector>
 #include <cassert>
+#include <mutex>
 
 // Example 1: Sequentially Consistent (default)
 class SequentiallyConsistent {

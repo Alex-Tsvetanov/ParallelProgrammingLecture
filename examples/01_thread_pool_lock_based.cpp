@@ -10,6 +10,7 @@
 #include <functional>
 #include <vector>
 #include <chrono>
+#include <sstream>
 
 class ThreadPool {
 private:
@@ -23,7 +24,11 @@ public:
     ThreadPool(size_t threads) {
         for (size_t i = 0; i < threads; ++i) {
             workers.emplace_back([this, i] {
-                std::cout << "Worker " << i << " started\n";
+                {
+                    std::stringstream ss;
+                    ss << "Worker " << i << " started\n";
+                    std::cout << ss.str() << std::flush;
+                }
                 while (true) {
                     std::function<void()> task;
                     {
@@ -33,7 +38,11 @@ public:
                         });
                         
                         if (stop && tasks.empty()) {
-                            std::cout << "Worker " << i << " stopping\n";
+                            {
+                                std::stringstream ss;
+                                ss << "Worker " << i << " stopping\n";
+                                std::cout << ss.str() << std::flush;
+                            }
                             return;
                         }
                         
@@ -72,14 +81,26 @@ public:
 
 // Example usage
 void cpu_intensive_task(int id, int duration_ms) {
-    std::cout << "Task " << id << " starting (duration: " << duration_ms << "ms)\n";
+    {
+        std::stringstream ss;
+        ss << "Task " << id << " starting (duration: " << duration_ms << "ms)\n";
+        std::cout << ss.str() << std::flush;
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(duration_ms));
-    std::cout << "Task " << id << " completed\n";
+    {
+        std::stringstream ss;
+        ss << "Task " << id << " completed\n";
+        std::cout << ss.str() << std::flush;
+    }
 }
 
 int main() {
-    std::cout << "=== Lock-based Thread Pool Example ===\n";
-    std::cout << "Hardware concurrency: " << std::thread::hardware_concurrency() << "\n\n";
+    {
+        std::stringstream ss;
+        ss << "=== Lock-based Thread Pool Example ===\n";
+        ss << "Hardware concurrency: " << std::thread::hardware_concurrency() << "\n\n";
+        std::cout << ss.str() << std::flush;
+    }
 
     ThreadPool pool(4);
 
@@ -90,9 +111,17 @@ int main() {
         });
     }
 
-    std::cout << "\nAll tasks enqueued. Waiting for completion...\n";
+    {
+        std::stringstream ss;
+        ss << "\nAll tasks enqueued. Waiting for completion...\n";
+        std::cout << ss.str() << std::flush;
+    }
     std::this_thread::sleep_for(std::chrono::seconds(2));
-    std::cout << "\nMain thread exiting (pool destructor will wait for workers)\n";
+    {
+        std::stringstream ss;
+        ss << "\nMain thread exiting (pool destructor will wait for workers)\n";
+        std::cout << ss.str() << std::flush;
+    }
 
     return 0;
 }
