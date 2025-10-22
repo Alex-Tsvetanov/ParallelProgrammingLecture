@@ -161,7 +161,7 @@ fi\n\
 # Set environment variables
 ENV CXX=g++
 ENV CC=gcc
-ENV MAKEFLAGS="-j$(nproc)"
+# ENV MAKEFLAGS="-j$(nproc)"
 
 # Print welcome message on container start
 RUN echo '#!/bin/bash\n\

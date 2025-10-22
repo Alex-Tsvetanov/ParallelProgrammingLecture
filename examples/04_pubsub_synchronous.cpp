@@ -8,6 +8,7 @@
 #include <string>
 #include <memory>
 #include <algorithm>
+#include <sstream>
 
 // Event types
 struct TemperatureEvent {

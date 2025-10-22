@@ -3,6 +3,7 @@
 // Topics: std::thread, std::mutex, std::function, async dispatch
 
 #include <iostream>
+#include <sstream>
 #include <functional>
 #include <vector>
 #include <thread>

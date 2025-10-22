@@ -7,6 +7,7 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+#include <sstream>
 
 template<typename T>
 class LockFreeQueue {
@@ -93,7 +94,11 @@ void producer(LockFreeQueue<int>& queue, int id, int count) {
     for (int i = 0; i < count; ++i) {
         int value = id * 1000 + i;
         queue.enqueue(value);
-        std::cout << "Producer " << id << " enqueued: " << value << "\n";
+        {
+            std::stringstream ss;
+            ss << "Producer " << id << " enqueued: " << value << "\n";
+            std::cout << ss.str() << std::flush;
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
@@ -103,7 +108,11 @@ void consumer(LockFreeQueue<int>& queue, int id, int expected_count) {
     while (consumed < expected_count) {
         auto value = queue.dequeue();
         if (value) {
-            std::cout << "Consumer " << id << " dequeued: " << *value << "\n";
+            {
+                std::stringstream ss;
+                ss << "Consumer " << id << " dequeued: " << *value << "\n";
+                std::cout << ss.str() << std::flush;
+            }
             consumed++;
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -112,7 +121,11 @@ void consumer(LockFreeQueue<int>& queue, int id, int expected_count) {
 }
 
 int main() {
-    std::cout << "=== Lock-Free Queue Example ===\n\n";
+    {
+        std::stringstream ss;
+        ss << "=== Lock-Free Queue Example ===\n\n";
+        std::cout << ss.str() << std::flush;
+    }
     
     LockFreeQueue<int> queue;
     
@@ -138,8 +151,12 @@ int main() {
         t.join();
     }
     
-    std::cout << "\nAll threads completed\n";
-    std::cout << "Queue empty: " << (queue.empty() ? "yes" : "no") << "\n";
+    {
+        std::stringstream ss;
+        ss << "\nAll threads completed\n";
+        ss << "Queue empty: " << (queue.empty() ? "yes" : "no") << "\n";
+        std::cout << ss.str() << std::flush;
+    }
     
     return 0;
 }

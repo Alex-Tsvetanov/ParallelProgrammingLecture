@@ -3,6 +3,7 @@
 // Topics: Integration of thread pool, lock-free structures, and event-driven design
 
 #include <iostream>
+#include <sstream>
 #include <thread>
 #include <atomic>
 #include <memory>
@@ -141,25 +142,26 @@ private:
         std::shared_ptr<SubscriberNode> next;
     };
 
-    std::atomic<std::shared_ptr<SubscriberNode>> head{nullptr};
+    // Using shared_ptr directly with atomic operations for MSVC compatibility
+    std::shared_ptr<SubscriberNode> head;
     LockFreeThreadPool& pool;
     std::atomic<uint64_t> events_published{0};
     std::atomic<uint64_t> callbacks_executed{0};
 
 public:
     explicit HighPerfEventBroker(LockFreeThreadPool& thread_pool) 
-        : pool(thread_pool) {}
+        : head(nullptr), pool(thread_pool) {}
 
     // Lock-free subscribe
     void subscribe(Callback callback) {
         auto new_node = std::make_shared<SubscriberNode>();
         new_node->callback = std::move(callback);
         
-        auto old_head = head.load(std::memory_order_acquire);
+        auto old_head = std::atomic_load_explicit(&head, std::memory_order_acquire);
         do {
             new_node->next = old_head;
-        } while (!head.compare_exchange_weak(
-            old_head, new_node,
+        } while (!std::atomic_compare_exchange_weak_explicit(
+            &head, &old_head, new_node,
             std::memory_order_release,
             std::memory_order_acquire));
     }
@@ -168,7 +170,7 @@ public:
     void publish(const Event& event) {
         events_published.fetch_add(1, std::memory_order_relaxed);
         
-        auto node = head.load(std::memory_order_acquire);
+        auto node = std::atomic_load_explicit(&head, std::memory_order_acquire);
         while (node) {
             // Dispatch each callback to thread pool
             pool.submit([cb = node->callback, event, this]() {
