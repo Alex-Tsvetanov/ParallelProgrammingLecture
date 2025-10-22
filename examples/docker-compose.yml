@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  parallel-examples:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: parallel-programming-examples:latest
+    container_name: parallel-programming
+    
+    # Enable all CPU cores
+    cpus: '0'
+    
+    # Allocate memory
+    mem_limit: 2g
+    
+    # Keep container running for interactive use
+    stdin_open: true
+    tty: true
+    
+    # Mount source code for live editing
+    volumes:
+      - ./:/examples
+      - build-cache:/examples/build
+    
+    # Working directory
+    working_dir: /examples
+    
+    # Environment variables
+    environment:
+      - TERM=xterm-256color
+      - LANG=C.UTF-8
+      - LC_ALL=C.UTF-8
+    
+    # Security options
+    security_opt:
+      - seccomp:unconfined  # Allow profiling tools
+    
+    # Capabilities for debugging
+    cap_add:
+      - SYS_PTRACE  # For debuggers
+
+volumes:
+  build-cache:
+    driver: local

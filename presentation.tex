@@ -9,8 +9,18 @@
 \pgfplotsset{compat=1.18}
 \usetikzlibrary{arrows.meta, positioning, shapes}
 
-\usetheme{Madrid}
+\usetheme{default}
 \usecolortheme{default}
+%gets rid of bottom navigation bars
+\setbeamertemplate{footline}[frame number]{}
+
+%gets rid of bottom navigation symbols
+\setbeamertemplate{navigation symbols}{}
+
+%gets rid of footer
+%will override 'frame number' instruction above
+%comment out to revert to previous/default definitions
+%\setbeamertemplate{footline}{}
 
 % Настройки за код
 \lstset{
@@ -69,7 +79,7 @@
 
 \title{Модерни техники за паралелизъм и асинхронност в C++}
 \subtitle{Thread Pools, Coroutines и Publisher/Subscriber Pattern}
-\author{Алекс Цветанов, КСИ, ФКСТ, 121222225}
+\author{Алекс Цветанов, КСИ, ФКСТ}
 \institute{Паралелно програмиране}
 \date{\today}
 
@@ -120,28 +130,30 @@
 
 \begin{frame}{Паралелизъм vs Асинхронност}
 \begin{center}
-\begin{tikzpicture}[scale=0.85]
-    % Parallelism
-    \node[font=\bfseries] at (0,3.5) {Паралелизъм};
-    \draw[fill=green!20, thick] (0,2.5) rectangle (1.5,3) node[pos=.5] {\tiny Task 1};
-    \draw[fill=green!20, thick] (0,2) rectangle (1.5,2.5) node[pos=.5] {\tiny Task 2};
-    \draw[fill=green!20, thick] (0,1.5) rectangle (1.5,2) node[pos=.5] {\tiny Task 3};
-    \node[right] at (2.0,2.25) {\small Едновременно\\изпълнение};
+\begin{tikzpicture}[scale=0.7]
+    % Parallelism - LEFT SIDE
+    \node[font=\bfseries] at (0,2.8) {Паралелизъм};
+    \draw[fill=green!20, thick] (0,1.8) rectangle (1.5,2.3) node[pos=.5] {\tiny Task 1};
+    \draw[fill=green!20, thick] (0,1.2) rectangle (1.5,1.7) node[pos=.5] {\tiny Task 2};
+    \draw[fill=green!20, thick] (0,0.6) rectangle (1.5,1.1) node[pos=.5] {\tiny Task 3};
+    \node[right, align=left] at (1.7,1.4) {\small Едновременно\\[-2pt]\small изпълнение};
     
-    % Concurrency/Async
-    \node[font=\bfseries] at (8,3.5) {Асинхронност};
-    \draw[fill=blue!20, thick] (6.5,2.8) rectangle (7.4,3.2) node[pos=.5] {\tiny T1};
-    \draw[fill=red!20, thick] (7.6,2.8) rectangle (8.3,3.2) node[pos=.5] {\tiny T2};
-    \draw[fill=blue!20, thick] (8.5,2.8) rectangle (9.4,3.2) node[pos=.5] {\tiny T1};
+    % Concurrency/Async - RIGHT SIDE
+    \node[font=\bfseries] at (7,2.8) {Асинхронност};
+    % Row 1
+    \draw[fill=blue!20, thick] (5.5,2.0) rectangle (6.3,2.4) node[pos=.5] {\tiny T1};
+    \draw[fill=red!20, thick] (6.4,2.0) rectangle (7.0,2.4) node[pos=.5] {\tiny T2};
+    \draw[fill=blue!20, thick] (7.1,2.0) rectangle (7.9,2.4) node[pos=.5] {\tiny T1};
+    % Row 2
+    \draw[fill=red!20, thick] (5.5,1.4) rectangle (6.1,1.8) node[pos=.5] {\tiny T2};
+    \draw[fill=yellow!40, thick] (6.2,1.4) rectangle (7.0,1.8) node[pos=.5] {\tiny T3};
+    \draw[fill=blue!20, thick] (7.1,1.4) rectangle (7.9,1.8) node[pos=.5] {\tiny T1};
     
-    \draw[fill=red!20, thick] (6.5,2.2) rectangle (7.2,2.6) node[pos=.5] {\tiny T2};
-    \draw[fill=yellow!40, thick] (7.4,2.2) rectangle (8.3,2.6) node[pos=.5] {\tiny T3};
-    \draw[fill=blue!20, thick] (8.5,2.2) rectangle (9.4,2.6) node[pos=.5] {\tiny T1};
-    
-    \node[right] at (9.7,2.5) {\small Чередуване};
+    \node[right, align=left] at (8.1,1.7) {\small Чередуване};
 \end{tikzpicture}
 \end{center}
 
+\vspace{0.3cm}
 \textbf{Thread Pools:} истински паралелизъм (multiple cores) \\
 \textbf{Coroutines:} кооперативна многозадачност (single core OK)
 \end{frame}
@@ -156,15 +168,20 @@
     task/.style={rectangle, draw, fill=orange!30, minimum width=0.6cm, minimum height=0.4cm},
     thread/.style={rectangle, draw, fill=blue!20, minimum width=1.5cm, minimum height=0.6cm}]
     
+    % Arrows
+    \draw[-Latex, thick, red] (1,2.5) -- (t1.west);
+    \draw[-Latex, thick, red] (1,2.5) -- (t2.west);
+    \draw[-Latex, thick, red] (1,2.5) -- (t3.west);
+    
     % Task Queue
     \node[font=\bfseries] at (-2,3.5) {Task Queue};
-    \draw[thick] (-4,2) rectangle (0,3);
+    \draw[thick] (-4,2) rectangle (1,3);
     \node[task] at (-3.5,2.5) {T1};
-    \node[task] at (-2.8,2.5) {T2};
-    \node[task] at (-2.1,2.5) {T3};
-    \node[task] at (-1.4,2.5) {T4};
-    \node[task] at (-0.7,2.5) {T5};
-    \node at (-0.2,2.5) {...};
+    \node[task] at (-2.6,2.5) {T2};
+    \node[task] at (-1.7,2.5) {T3};
+    \node[task] at (-0.8,2.5) {T4};
+    \node[task] at (0.1,2.5) {T5};
+    \node at (0.75,2.5) {...};
     
     % Thread Pool
     \node[font=\bfseries] at (4,3.5) {Thread Pool};
@@ -172,11 +189,6 @@
     \node[thread] (t2) at (4,1.9) {Worker 2};
     \node[thread] (t3) at (4,1.1) {Worker 3};
     \node at (4,0.5) {...};
-    
-    % Arrows
-    \draw[-Latex, thick, red] (-0.2,2.5) -- (t1.west);
-    \draw[-Latex, thick, red] (-0.2,2.5) -- (t2.west);
-    \draw[-Latex, thick, red] (-0.2,2.5) -- (t3.west);
 \end{tikzpicture}
 \end{center}
 
@@ -195,10 +207,10 @@
 
 \begin{frame}[fragile]{Защо Thread Pool? Цената на създаване на нишки}
 
-\textbf{Проблем:} Създаването и унищожаването на std::thread обекти е скъпа операция!
+\textbf{Проблем:} Създаването и унищожаването на std::thread обекти е скъпа операция! \\
 
 \begin{columns}
-\column{0.48\textwidth}
+\column{0.45\textwidth}
 \textbf{Наивен подход:}
 \begin{lstlisting}[basicstyle=\ttfamily\tiny]
 // Създаване на нова нишка 
@@ -218,7 +230,7 @@ for (auto& task : tasks) {
 // 5. Няма контрол върху броя
 \end{lstlisting}
 
-\column{0.48\textwidth}
+\column{0.45\textwidth}
 \textbf{Thread Pool подход:}
 \begin{lstlisting}[basicstyle=\ttfamily\tiny]
 // Еднократно създаване
@@ -385,15 +397,12 @@ class LockFreeQueue {
         std::atomic<Node*> next;
         Node() : next(nullptr) {}
     };
-    
     std::atomic<Node*> head;
     std::atomic<Node*> tail;
-    
 public:
     void enqueue(T value) {
         auto new_node = new Node();
         new_node->data = std::make_shared<T>(std::move(value));
-        
         Node* old_tail = tail.load(std::memory_order_relaxed);
         while (!tail.compare_exchange_weak(old_tail, new_node, 
                std::memory_order_release, std::memory_order_relaxed)) {
@@ -401,7 +410,6 @@ public:
         }
         old_tail->next.store(new_node, std::memory_order_release);
     }
-    
     std::shared_ptr<T> dequeue() {
         Node* old_head = head.load(std::memory_order_acquire);
         while (old_head && !head.compare_exchange_weak(old_head, 
@@ -424,7 +432,7 @@ public:
         ymin=0, ymax=100,
         xtick={1,2,4,8,16},
         ytick={0,20,40,60,80,100},
-        legend pos=north west,
+        legend pos=south east,
         width=10cm,
         height=6cm,
         grid=major
@@ -525,7 +533,7 @@ public:
     \item Управлявани от ОС
     \item Преемптивен scheduling
     \item Тежки (MB stack)
-    \item Context switch \textasciitilde 1-10$\mu$s
+    \item Context switch $\approx$1-10$\mu$s
     \item Паралелно изпълнение
     \item Използват множество ядра
 \end{itemize}
@@ -536,7 +544,7 @@ public:
     \item Управлявани от програмата
     \item Кооперативен scheduling
     \item Леки (KB state)
-    \item Context switch \textasciitilde 10-100ns
+    \item Context switch $\approx$10-100ns
     \item Конкурентно, не паралелно
     \item Едно ядро (освен ако...)
 \end{itemize}
@@ -591,7 +599,7 @@ public:
     
     % Coroutine
     \node[font=\bfseries] at (3,4) {Coroutine};
-    \draw[fill=green!20, thick] (1.5,2.5) rectangle (4.5,3.5) node[pos=.5] {Coroutine Frame};
+    \draw[fill=green!20, thick] (1.0,2.5) rectangle (5.0,3.5) node[pos=.5] {Coroutine Frame};
     \node[below, font=\tiny] at (3,2.3) {Local vars + Resume point};
     \node[below, font=\tiny] at (3,2.0) {Typically < 1 KB};
     \draw[fill=yellow!20, thick] (1.5,1) rectangle (4.5,1.5) node[pos=.5] {\tiny Promise};
@@ -604,39 +612,169 @@ public:
 
 \subsection{Предизвикателства}
 
-\begin{frame}[fragile]{Предизвикателство: Bus Errors и Stack Overflow}
+\begin{frame}[fragile]{Предизвикателство: Dangling References и Pointers}
 
-\textbf{Проблем 1: Неправилно използване на указатели}
+\textbf{ВАЖНО:} Локални променливи в coroutine са БЕЗОПАСНИ (в coroutine frame)!
 
 \begin{lstlisting}[basicstyle=\ttfamily\tiny]
-Task<int> dangerous_coroutine() {
-    int local_var = 42;
+Task<int> safe_coroutine() {
+    int local_var = 42;  // OK! В coroutine frame
     co_await some_async_operation();
-    // Ако coroutine се премести в друга нишка,
-    // stack-allocated променливи могат да станат невалидни!
-    return local_var;  // Потенциален bus error!
+    return local_var;  // БЕЗОПАСНО!
 }
 \end{lstlisting}
 
-\textbf{Проблем 2: Lifetime на локални променливи}
+\textbf{Проблем 1: Указатели/референции към ВЪН от coroutine}
 
 \begin{lstlisting}[basicstyle=\ttfamily\tiny]
-Task<void> reference_problem() {
-    std::string temp = "dangerous";
-    auto& ref = temp;
+Task<void> dangerous_coroutine(int* ptr) {  // Външен указател!
+    co_await some_async_operation();
+    *ptr = 42;  // ОПАСНО! ptr може да е невалиден
+}
+
+void caller() {
+    int x = 10;
+    auto task = dangerous_coroutine(&x);  // Адрес от caller stack
+    // Ако caller приключи преди coroutine да resume-не...
+    // x вече не съществува! -> Dangling pointer
+}
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Предизвикателство: Dangling References и Pointers}
+
+\textbf{Проблем 2: Referencing локални променливи от caller; Lambda capture by reference}
+
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+void caller() {
+    std::vector<int> data = {1, 2, 3, 4, 5};
     
-    co_await switch_thread();  // Преминаване към друга нишка
+    auto task = [&data]() -> Task<void> {  // Capture by reference!
+        co_await async_operation();
+        // data е на stack-а на caller()
+        // Ако caller() приключи преди resume -> CRASH!
+        for (int x : data) { std::cout << x; }  // BUS ERROR!
+    }();
     
-    std::cout << ref;  // UNDEFINED BEHAVIOR! temp вече не съществува
+    // caller() завършва, data се унищожава
+    // но coroutine все още го реферира!
 }
 \end{lstlisting}
 
-\textbf{Решение:}
+\textbf{Обобщение:}
 \begin{itemize}
-    \item Всички данни в coroutine frame (не на stack)
-    \item Избягвайте references към локални променливи
-    \item Използвайте \texttt{std::move} или копиране
+    \item[\checkmark] Локални променливи В coroutine $\rightarrow$ coroutine frame (SAFE)
+    \item[$\times$] Указатели/референции КЪМ външни данни $\rightarrow$ dangling (DANGEROUS)
+    \item[\checkmark] Използвайте capture by value: \texttt{[data]} вместо \texttt{[\&data]}
 \end{itemize}
+\end{frame}
+
+
+
+\begin{frame}[fragile]{Решение: Как да поставим данни в coroutine frame?}
+
+\textbf{Правило:} Всички променливи дефинирани в coroutine тяло автоматично се съхраняват в heap-allocated coroutine frame
+
+\begin{columns}
+\column{0.48\textwidth}
+\textbf{Грешно (stack reference):}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+Task<void> bad_example() {
+    std::string temp = "data";
+    std::string& ref = temp;
+    
+    co_await switch_context();
+    
+    // ref може да е невалиден!
+    std::cout << ref;
+}
+
+// Външна променлива
+void caller() {
+    int x = 42;
+    auto task = [&x]() -> Task<void> {
+        co_await something();
+        // x е dangling reference!
+        use(x);
+    }();
+}
+\end{lstlisting}
+
+\column{0.48\textwidth}
+\textbf{Правилно (coroutine frame):}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+Task<void> good_example() {
+    // Копие в coroutine frame
+    std::string data = "data";
+    
+    co_await switch_context();
+    
+    // data е винаги валиден
+    std::cout << data;
+}
+
+// Правилно capture
+void caller() {
+    int x = 42;
+    auto task = [x]() -> Task<void> {
+        // x е копирано (by value)
+        co_await something();
+        use(x); // SAFE!
+    }();
+}
+\end{lstlisting}
+\end{columns}
+
+\vspace{0.3cm}
+\textbf{Ключът:} Компилаторът автоматично премества локални променливи в coroutine frame. Проблемът идва от references/pointers към външни данни!
+\end{frame}
+
+\begin{frame}[fragile]{Техники за безопасно управление на данни}
+\begin{columns}
+\column{0.45\textwidth}
+\textbf{1. Копиране вместо referencing}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+Task<void> process(std::string data) { 
+    // by value = copy in frame
+    co_await async_operation();
+    use(data);  // Safe
+}
+\end{lstlisting}
+
+\textbf{2. std::move за големи обекти}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+Task<void> process(std::vector<int> vec) {
+    auto local_vec = std::move(vec); 
+    // Move в coroutine frame
+    co_await async_operation();
+    use(local_vec);
+}
+\end{lstlisting}
+
+\column{0.45\textwidth}
+\textbf{3. shared\_ptr за споделени данни}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+Task<void> process(std::shared_ptr<BigData> data) {  
+    // shared_ptr копира контролния блок, 
+    // не данните
+    co_await async_operation();
+    use(*data);  // Safe - data е жив докато
+                 // има reference
+}
+\end{lstlisting}
+
+\textbf{4. Promise type с custom allocation}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny]
+struct promise_type {
+    void* operator new(size_t size) {
+      // Custom allocator за coroutine frame
+      return my_pool_allocator.allocate(size);
+    }
+    // Всички локални променливи + promise
+    // отиват тук
+};
+\end{lstlisting}    
+\end{columns}
 \end{frame}
 
 \begin{frame}[fragile]{Предизвикателство: Debugging и Stack Traces}
@@ -673,7 +811,6 @@ Task<void> level1() {
 
 \begin{frame}[fragile]{Проста Coroutine имплементация (C++20)}
 \begin{lstlisting}[basicstyle=\ttfamily\tiny]
-\begin{lstlisting}[basicstyle=\ttfamily\tiny]
 #include <coroutine>
 #include <iostream>
 
@@ -681,30 +818,24 @@ template<typename T>
 struct Task {
     struct promise_type {
         T value;
-        
         Task get_return_object() {
             return Task{std::coroutine_handle<promise_type>::from_promise(*this)};
         }
         std::suspend_never initial_suspend() { return {}; }
         std::suspend_always final_suspend() noexcept { return {}; }
         void unhandled_exception() { std::terminate(); }
-        
         void return_value(T v) { value = v; }
     };
-    
     std::coroutine_handle<promise_type> handle;
-    
     T get() { return handle.promise().value; }
     ~Task() { if (handle) handle.destroy(); }
 };
-
 Task<int> async_computation() {
     std::cout << "Starting...\n";
     co_await std::suspend_always{};  // Suspend тук
     std::cout << "Resuming...\n";
     co_return 42;
 }
-
 int main() {
     auto task = async_computation();  // Стартира, спира на co_await
     task.handle.resume();  // Продължава изпълнението
@@ -914,8 +1045,8 @@ Task<void> process_files() {
 \begin{center}
 \begin{tikzpicture}[scale=0.8]
     % Fast publisher
-    \node[rectangle, draw, fill=red!40] at (0,2) {Fast Publisher};
-    \draw[-Latex, very thick, red] (1.5,2) -- (3,2) node[midway, above] {\tiny 10000 msg/s};
+    \node[rectangle, draw, fill=red!40] at (-0.75,2) {Fast Publisher};
+    \draw[-Latex, very thick, red] (1,2) -- (3,2) node[midway, above] {\tiny 10000 msg/s};
     
     % Queue
     \node[rectangle, draw, fill=yellow!30, minimum width=2cm, minimum height=1.5cm] (queue) at (4.5,2) {};
@@ -926,7 +1057,7 @@ Task<void> process_files() {
     \node[below, red] at (4.5,1.2) {\tiny OVERFLOW!};
     
     % Slow subscriber
-    \node[rectangle, draw, fill=blue!20] at (8,2) {Slow Subscriber};
+    \node[rectangle, draw, fill=blue!20] at (9,2) {Slow Subscriber};
     \draw[-Latex, thick, blue] (6,2) -- (7,2) node[midway, above] {\tiny 100 msg/s};
 \end{tikzpicture}
 \end{center}
@@ -1048,9 +1179,9 @@ public:
     \node[rectangle, draw, fill=yellow!30] (broker) at (0,1.8) {Broker (mutex)};
     
     \draw[-Latex, thick] (pub) -- (broker);
-    \draw[-Latex, thick] (broker.east) -- ++(1,0) |- (2,2.5) node[right] {\tiny Sub1};
-    \draw[-Latex, thick] (broker.east) -- ++(1,0) |- (2,2.0) node[right] {\tiny Sub2};
-    \draw[-Latex, thick] (broker.east) -- ++(1,0) |- (2,1.5) node[right] {\tiny Sub3};
+    \draw[-Latex, thick] (broker.east) -- ++(1,0) |- (broker.east) -- ++(1.5,1.0) node[right] {\tiny Sub1};
+    \draw[-Latex, thick] (broker.east) -- ++(1,0) |- (broker.east) -- ++(1.5,0.0) node[right] {\tiny Sub2};
+    \draw[-Latex, thick] (broker.east) -- ++(1,0) |- (broker.east) -- ++(1.5,-1.0) node[right] {\tiny Sub3};
     \node[below, red] at (0,0.8) {\tiny Serialization!};
     
     % Optimized approach
@@ -1059,9 +1190,9 @@ public:
     \node[rectangle, draw, fill=green!30] (broker2) at (7,1.8) {Lock-free Broker};
     
     \draw[-Latex, thick, green!60!black] (pub2) -- (broker2);
-    \draw[-Latex, thick, green!60!black] (broker2) -- ++(1.5,0) |- (9.5,2.5) node[right] {\tiny Sub1};
-    \draw[-Latex, thick, green!60!black] (broker2) -- ++(1.5,0) |- (9.5,2.0) node[right] {\tiny Sub2};
-    \draw[-Latex, thick, green!60!black] (broker2) -- ++(1.5,0) |- (9.5,1.5) node[right] {\tiny Sub3};
+    \draw[-Latex, thick, green!60!black] (broker2.east) -- ++(1.5,0) |- (broker2.east) -- ++(2.0,1.0) node[right] {\tiny Sub1};
+    \draw[-Latex, thick, green!60!black] (broker2.east) -- ++(1.5,0) |- (broker2.east) -- ++(2.0,0.0) node[right] {\tiny Sub2};
+    \draw[-Latex, thick, green!60!black] (broker2.east) -- ++(1.5,0) |- (broker2.east) -- ++(2.0,-1.0) node[right] {\tiny Sub3};
     \node[below, green!60!black] at (7,0.8) {\tiny Паралелно!};
 \end{tikzpicture}
 \end{center}
@@ -1075,74 +1206,197 @@ public:
 \end{itemize}
 \end{frame}
 
-\begin{frame}{Научна работа: Паралелизирано разпращане на съобщения}
-
-\textbf{Заглавие:} "Efficient Parallelized Message Dispatching in Publisher/Subscriber Systems"
-
-\vspace{0.3cm}
-
-\textbf{Основни приноси:}
-\begin{enumerate}
-    \item \textbf{Lock-free dispatch algorithm}
-    \begin{itemize}
-        \item CAS-based subscriber registration
-        \item Wait-free publish() имплементация
-        \item RCU за безопасно четене на subscriber list
-    \end{itemize}
+\begin{frame}[fragile]{Сравнителна графика: Всички имплементации}
+\begin{tikzpicture}
+    \begin{axis}[
+        width=\textwidth,
+        height=6.5cm,
+        xlabel={Брой абонати},
+        ylabel={Време (ns)},
+        xmode=log,
+        ymode=log,
+        legend style={at={(0.5,-0.22)}, anchor=north, legend columns=4, font=\tiny},
+        grid=major,
+        mark options={solid},
+        tick label style={font=\tiny},
+        label style={font=\small}
+    ]
     
-    \item \textbf{Thread Pool integration}
-    \begin{itemize}
-        \item Work-stealing за балансировка
-        \item Subscriber affinity за cache locality
-    \end{itemize}
+        %% PubSub Sync
+        \addplot+[mark=*, thick] coordinates {
+            (1, 0.001678) (10, 0.001920) (100, 0.001732) (1000, 0.001138) (100000, 0.001067)
+        };
+        \addlegendentry{PubSub Sync}
+        
+        %% StdAsync NoWait
+        \addplot+[mark=square*, thick] coordinates {
+            (1, 0.003285) (10, 0.012376) (100, 0.008696) (1000, 0.008552) (100000, 0.006913)
+        };
+        \addlegendentry{StdAsync NoWait}
+        
+        %% std::exec seq
+        \addplot+[mark=triangle*, thick] coordinates {
+            (1, 0.001199) (10, 0.001584) (100, 0.001345) (1000, 0.000561) (100000, 0.001098)
+        };
+        \addlegendentry{std::exec seq}
+        
+        %% std::exec par
+        \addplot+[mark=diamond*, thick] coordinates {
+            (1, 0.001546) (10, 0.001907) (100, 0.001481) (1000, 0.000933) (100000, 0.001179)
+        };
+        \addlegendentry{std::exec par}
+        
+        %% std::exec par_unseq
+        \addplot+[mark=star, thick] coordinates {
+            (1, 0.001632) (10, 0.000363) (100, 0.001491) (1000, 0.000731) (100000, 0.001319)
+        };
+        \addlegendentry{std::exec par\_unseq}
+        
+        %% std::exec unseq
+        \addplot+[mark=halfcircle*, thick] coordinates {
+            (1, 0.001447) (10, 0.000889) (100, 0.000893) (1000, 0.000897) (100000, 0.001263)
+        };
+        \addlegendentry{std::exec unseq}
+        
+        %% TBB
+        \addplot+[mark=+, thick] coordinates {
+            (1, 0.000004) (10, 0.000753) (100, 0.002422) (1000, 0.001643) (100000, 0.002144)
+        };
+        \addlegendentry{TBB}
+        
+        %% Boost
+        \addplot+[mark=x, thick] coordinates {
+            (1, 0.000820) (10, 0.001429) (100, 0.001530) (1000, 0.000659) (100000, 0.001000)
+        };
+        \addlegendentry{Boost}
+        
+        %% Qt
+        \addplot+[mark=otimes*, thick] coordinates {
+            (1, 0.001374) (10, 0.001596) (100, 0.000879) (1000, 0.001814) (100000, 0.001157)
+        };
+        \addlegendentry{Qt}
+        
+        %% Python
+        \addplot+[mark=triangle, thick] coordinates {
+            (1, 17147.482064) (10, 15299.786308) (100, 18820.008432) (1000, 13669.851635) (100000, 15613.057011)
+        };
+        \addlegendentry{Python}
+        
+        %% NodeJS
+        \addplot+[mark=diamond, thick] coordinates {
+            (1, 4011.392354) (10, 246244.767299) (100, 281627.468817) (1000, 795439.269405) (100000, 1174037.044250)
+        };
+        \addlegendentry{NodeJS}
     
-    \item \textbf{Performance benchmarks}
-    \begin{itemize}
-        \item 10x throughput подобрение при 16+ subscribers
-        \item 50\% latency редукция спрямо mutex-based подход
-        \item Scaling до 128 CPU cores
-    \end{itemize}
-\end{enumerate}
-
-\vspace{0.3cm}
-\centering
-\textit{Комбинацията Thread Pool + Lock-free Pub/Sub = High-Performance системи}
+    \end{axis}
+\end{tikzpicture}
 \end{frame}
 
-\begin{frame}[fragile]{Code snippet от работата: RCU-based Subscriber List}
-\begin{lstlisting}[basicstyle=\ttfamily\tiny]
-template<typename Event>
-class RCUEventBroker {
-    struct SubscriberNode {
-        std::function<void(const Event&)> callback;
-        std::shared_ptr<SubscriberNode> next;
-    };
+\begin{frame}[fragile]{Сравнителна графика: C++ имплементации}
+\begin{columns}[T]
+\column{0.62\textwidth}
+\begin{tikzpicture}
+    \begin{axis}[
+        width=\textwidth,
+        height=6.5cm,
+        xlabel={Брой абонати},
+        ylabel={Време (ns)},
+        xmode=log,
+        ymode=log,
+        legend style={at={(0.5,-0.22)}, anchor=north, legend columns=3, font=\tiny},
+        grid=major,
+        mark options={solid},
+        tick label style={font=\tiny},
+        label style={font=\small}
+    ]
     
-    std::atomic<std::shared_ptr<SubscriberNode>> head;
-    ThreadPool pool;
-
-public:
-    void subscribe(std::function<void(const Event&)> callback) {
-        auto new_node = std::make_shared<SubscriberNode>();
-        new_node->callback = std::move(callback);
+        %% PubSub Sync
+        \addplot+[mark=*, thick] coordinates {
+            (1, 0.001678) (10, 0.001920) (100, 0.001732) (1000, 0.001138) (100000, 0.001067)
+        };
+        \addlegendentry{PubSub Sync}
         
-        auto old_head = head.load(std::memory_order_acquire);
-        do {
-            new_node->next = old_head;
-        } while (!head.compare_exchange_weak(old_head, new_node,
-                 std::memory_order_release, std::memory_order_acquire));
-    }
+        %% StdAsync NoWait
+        \addplot+[mark=square*, thick] coordinates {
+            (1, 0.003285) (10, 0.012376) (100, 0.008696) (1000, 0.008552) (100000, 0.006913)
+        };
+        \addlegendentry{StdAsync NoWait}
+        
+        %% std::exec seq
+        \addplot+[mark=triangle*, thick] coordinates {
+            (1, 0.001199) (10, 0.001584) (100, 0.001345) (1000, 0.000561) (100000, 0.001098)
+        };
+        \addlegendentry{std::exec seq}
+        
+        %% std::exec par
+        \addplot+[mark=diamond*, thick] coordinates {
+            (1, 0.001546) (10, 0.001907) (100, 0.001481) (1000, 0.000933) (100000, 0.001179)
+        };
+        \addlegendentry{std::exec par}
+        
+        %% std::exec par_unseq
+        \addplot+[mark=star, thick] coordinates {
+            (1, 0.001632) (10, 0.000363) (100, 0.001491) (1000, 0.000731) (100000, 0.001319)
+        };
+        \addlegendentry{std::exec par\_unseq}
+        
+        %% std::exec unseq
+        \addplot+[mark=halfcircle*, thick] coordinates {
+            (1, 0.001447) (10, 0.000889) (100, 0.000893) (1000, 0.000897) (100000, 0.001263)
+        };
+        \addlegendentry{std::exec unseq}
+        
+        %% TBB
+        \addplot+[mark=+, thick] coordinates {
+            (1, 0.000004) (10, 0.000753) (100, 0.002422) (1000, 0.001643) (100000, 0.002144)
+        };
+        \addlegendentry{TBB}
+        
+        %% Boost
+        \addplot+[mark=x, thick] coordinates {
+            (1, 0.000820) (10, 0.001429) (100, 0.001530) (1000, 0.000659) (100000, 0.001000)
+        };
+        \addlegendentry{Boost}
+        
+        %% Qt
+        \addplot+[mark=otimes*, thick] coordinates {
+            (1, 0.001374) (10, 0.001596) (100, 0.000879) (1000, 0.001814) (100000, 0.001157)
+        };
+        \addlegendentry{Qt}
     
-    void publish(const Event& event) {
-        // Lock-free read
-        auto node = head.load(std::memory_order_acquire);
-        while (node) {
-            pool.enqueue([cb = node->callback, event]() { cb(event); });
-            node = node->next;
-        }
-    }
-};
+    \end{axis}
+\end{tikzpicture}
+
+\column{0.38\textwidth}
+\textbf{\tiny oneTBB:}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny, numbers=none, frame=none, backgroundcolor=\color{gray!5}]
+template<auto Event, typename... Args>
+bool Publisher::emit_tbb_async(Args&&... args) {
+ auto* handler = get_handler<Event>();
+ tbb::parallel_for_each(
+  handler->callbacks.begin(),
+  handler->callbacks.end(),
+  [&](const auto& cb) {
+   cb(std::forward<Args>(args)...);
+  });
+ return true;
+}
 \end{lstlisting}
+\textbf{\tiny std::execution:}
+\begin{lstlisting}[basicstyle=\ttfamily\tiny, numbers=none, frame=none, backgroundcolor=\color{gray!5}]
+template<auto Event, typename... Args>
+bool Publisher::emit_async(std::execution::parallel_policy policy, Args&&... args) {
+ auto* handler = get_handler<Event>();
+ std::for_each(policy,
+  handler->callbacks.begin(),
+  handler->callbacks.end(),
+  [&](const auto& cb) {
+    cb(std::forward<Args>(args)...);
+  });
+ return true;
+}
+\end{lstlisting}
+\end{columns}
 \end{frame}
 
 \section{Комбиниране на техниките}
@@ -1158,8 +1412,8 @@ public:
     
     \node[component, fill=red!20] (pool) at (5,0.5) {Thread Pool};
     
-    \node[component, fill=blue!20, align=center] (sub1) at (10,3.5) {Subscriber 1\\Coroutine};
-    \node[component, fill=blue!20, align=center] (sub2) at (10,2.5) {Subscriber 2\\CPU-bound};
+    \node[component, fill=blue!20, align=center] (sub1) at (10,5.5) {Subscriber 1\\Coroutine};
+    \node[component, fill=blue!20, align=center] (sub2) at (10,3.5) {Subscriber 2\\CPU-bound};
     \node[component, fill=blue!20, align=center] (sub3) at (10,1.5) {Subscriber 3\\I/O-bound};
     
     \draw[-Latex, thick] (source) -- (pub);
@@ -1189,7 +1443,7 @@ public:
 \textbf{Задача} & \textbf{Техника} & \textbf{Защо?} \\
 \hline
 CPU-intensive & Thread Pool & Използва всички ядра \\
-I/O операции & Coroutines & Ниски overhead, милиони conn \\
+I/O операции & Coroutines & Ниски overhead, милиони connections \\
 Event routing & Pub/Sub & Loose coupling \\
 High-throughput & Lock-free + Pool & Минимизира contention \\
 Mixed workload & Hybrid & Комбинира силни страни \\
@@ -1242,82 +1496,78 @@ Mixed workload & Hybrid & Комбинира силни страни \\
 \end{frame}
 
 \begin{frame}{Връзка с курса}
-\textbf{Модул 2: Комуникация между задачи}
+\textbf{Модул 2: Асинхронно програмиране с .NET}
 
 \begin{itemize}
-    \item Pub/Sub като message passing механизъм
-    \item Lock-free structures за синхронизация
-    \item Thread pools за task orchestration
+    \item \textbf{Лекция 2-2:} Подходи за асинхронен код $\rightarrow$ Thread Pools (C++)
+    \item \textbf{Лекция 2-3:} Async-await шаблон $\rightarrow$ Coroutines (C++20)
+    \item \textbf{Лекция 2-4:} Паралелен достъп до данни $\rightarrow$ Lock-free structures
+    \item \textbf{Лекция 2-1:} Оптимизация и performance $\rightarrow$ Benchmarks (днес)
 \end{itemize}
 
-\vspace{0.5cm}
+\vspace{0.4cm}
 
-\textbf{Scaling до distributed systems:}
+\textbf{C++ vs .NET паралели:}
 \begin{itemize}
-    \item ZeroMQ, RabbitMQ – distributed pub/sub
-    \item Apache Kafka – event streaming
-    \item gRPC, Protobuf – efficient serialization
+    \item .NET Task Parallel Library $\leftrightarrow$ C++ Thread Pool
+    \item .NET async/await $\leftrightarrow$ C++ coroutines (co\_await)
+    \item .NET Concurrent Collections $\leftrightarrow$ C++ lock-free queues
+    \item .NET Events $\leftrightarrow$ C++ Publisher/Subscriber pattern
 \end{itemize}
 
-\vspace{0.5cm}
+\vspace{0.4cm}
 
-\textbf{Допълнителни теми за изследване:}
+\textbf{Тази лекция разширява:}
 \begin{itemize}
-    \item Memory ordering (acquire/release semantics)
-    \item Hazard pointers за garbage collection
-    \item Transactional memory
+    \item Low-level имплементации на високо-ниво концепции
+    \item Performance considerations (защо Thread Pool вместо threads?)
+    \item Практически шаблони за комуникация (Pub/Sub)
 \end{itemize}
 \end{frame}
 
 \begin{frame}{Препоръчителна литература}
-\textbf{Книги:}
-\begin{itemize}
-    \item "C++ Concurrency in Action" – Anthony Williams
-    \item "The Art of Multiprocessor Programming" – Herlihy \& Shavit
-    \item "Programming with POSIX Threads" – David Butenhof
-\end{itemize}
-
-\vspace{0.3cm}
-
-\textbf{Papers:}
-\begin{itemize}
-    \item "Lock-Free Data Structures" – Michael \& Scott
-    \item "RCU (Read-Copy-Update)" – McKenney
-    \item "Efficient Parallelized Message Dispatching" – (ваша работа!)
-\end{itemize}
-
-\vspace{0.3cm}
-
-\textbf{Online ресурси:}
-\begin{itemize}
-    \item cppreference.com – coroutines, atomics
-    \item preshing.com – lock-free programming
-    \item 1024cores.net – Dmitry Vyukov's blog
-\end{itemize}
+\footnotesize
+\begin{columns}
+    \column{0.45\textwidth}
+        \textbf{Книги:}
+        \begin{itemize}
+            \item "C++ Concurrency in Action"\ – Anthony Williams
+            \item "The Art of Multiprocessor Programming"\ – Herlihy \& Shavit
+            \item "Programming with POSIX Threads"\ – David Butenhof
+        \end{itemize}
+        \textbf{Papers \& Talks:}
+        \begin{itemize}
+            \item "Lock-Free Data Structures"\ – Michael \& Scott
+            \item "RCU (Read-Copy-Update)"\ – McKenney
+            \item "Optimizing Asynchronous Event Dispatch in Modern C++ Publish/Subscribe Systems"\ – Alex Tsvetanov
+        \end{itemize}
+    \column{0.45\textwidth}
+        \textbf{Lock-Free Queue имплементации и talks:}
+        \begin{itemize}
+            \item \href{https://www.youtube.com/watch?v=bjz_bMNNWRk}{"User API and C++ Implementation of MPMC Lock Free Queue"}\ – Erez Strauss, CppCon 2024
+            \item \href{https://www.youtube.com/watch?v=_qaKkHuHYE0}{"Building a Lock-free MPMC Queue for Tcmalloc"}\ – Matt Kulukundis, CppCon 2021
+            \item \href{https://github.com/DNedic/lockfree}{github.com/DNedic/lockfree}\ – Djordje Nedic, Pablo Duboue, Lennart Schierling
+        \end{itemize}
+        
+        \textbf{Online ресурси:}
+        \begin{itemize}
+            \item \href{https://en.cppreference.com}{cppreference.com} – coroutines, atomics, memory ordering
+            \item \href{https://preshing.com}{preshing.com} – lock-free programming blog
+            \item \href{https://www.1024cores.net/home/lock-free-algorithms}{1024cores.net} – Dmitry Vyukov's concurrency blog
+        \end{itemize}
+\end{columns}
 \end{frame}
 
 \begin{frame}{Въпроси и дискусия}
 \centering
 \Huge{Въпроси?}
 
-\vspace{1cm}
-
-\normalsize
-\textbf{Теми за дискусия:}
-\begin{itemize}
-    \item ABA problem и решенията му
-    \item Memory ordering в practice
-    \item Profiling tools (perf, VTune, Tracy)
-    \item Real-world case studies
-    \item C++23/26 нововъведения (executors, async RAII)
-\end{itemize}
-
-\vspace{1cm}
+\vspace{4cm}
 \textit{Благодаря за вниманието!}
 
 \vspace{0.5cm}
 \small
-Контакт: alex@example.com | GitHub: github.com/alex
+Контакт: atsvetanov@tu-sofia.bg | GitHub: github.com/Alex-Tsvetanov
 \end{frame}
 
 \end{document}

@@ -1,0 +1,66 @@
+# Git files
+.git
+.gitignore
+.gitmodules
+.gitattributes
+
+# Build artifacts
+build/
+*.o
+*.exe
+*.out
+a.out
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation (will be copied explicitly)
+*.md
+!README.md
+!QUICK_REFERENCE.md
+
+# Compiled binaries
+01_thread_pool_lock_based
+02_lock_free_queue
+03_basic_coroutine
+04_pubsub_synchronous
+05_pubsub_async_threadpool
+06_pubsub_lockfree_rcu
+07_atomic_memory_ordering
+08_onetbb_examples
+09_coroutine_async_io
+10_hybrid_approach
+coroutine_based_thread_pool
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Node modules (if any)
+node_modules/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Archives
+*.tar
+*.tar.gz
+*.zip
+
+# pubsub-lib build artifacts (keep source)
+pubsub-lib/build/
+pubsub-lib/.cache/
+
+# Docker files (no need to copy into image)
+Dockerfile
+docker-compose.yml
+.dockerignore
+DOCKER.md
