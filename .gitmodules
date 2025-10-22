@@ -1,0 +1,3 @@
+[submodule "examples/pubsub-lib"]
+	path = examples/pubsub-lib
+	url = https://github.com/cpp-for-everything/pubsub-lib
