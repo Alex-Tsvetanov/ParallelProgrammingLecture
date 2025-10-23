@@ -101,7 +101,7 @@ public:
             });
     }
 
-    size_t subscriber_count() const {
+    size_t subscriber_count() {
         std::lock_guard<std::mutex> lock(mutex);
         return callbacks.size();
     }

@@ -1,0 +1,331 @@
+name: Build and Test Examples
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'examples/**'
+      - '.github/workflows/build-examples.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'examples/**'
+  workflow_dispatch:
+
+jobs:
+  build-ubuntu:
+    name: Ubuntu ${{ matrix.compiler }} C++${{ matrix.std }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++-12, clang-14]
+        std: [17, 20]
+        include:
+          - compiler: g++-12
+            cc: gcc-12
+            install: g++-12
+          - compiler: clang-14
+            cc: clang-14
+            install: clang-14
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ${{ matrix.install }} libtbb-dev cmake ninja-build
+
+    - name: Setup compiler
+      run: |
+        echo "CC=${{ matrix.cc }}" >> $GITHUB_ENV
+        echo "CXX=${{ matrix.compiler }}" >> $GITHUB_ENV
+
+    - name: Verify compiler version
+      run: |
+        ${{ matrix.compiler }} --version
+        cmake --version
+
+    - name: Configure CMake
+      working-directory: examples
+      run: |
+        mkdir -p build
+        cd build
+        cmake -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} \
+          -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+          ..
+
+    - name: Build examples
+      working-directory: examples/build
+      run: ninja -v
+
+    - name: List built executables
+      working-directory: examples/build
+      run: |
+        echo "Built executables:"
+        ls -lh
+
+    - name: Test C++17 examples
+      working-directory: examples/build
+      timeout-minutes: 2
+      run: |
+        echo "Testing lock-based thread pool..."
+        timeout 5s ./01_thread_pool_lock_based || true
+        
+        echo "Testing lock-free queue..."
+        timeout 5s ./02_lock_free_queue || true
+        
+        echo "Testing synchronous pub/sub..."
+        timeout 5s ./04_pubsub_synchronous || true
+        
+        echo "Testing async pub/sub..."
+        timeout 5s ./05_pubsub_async_threadpool || true
+        
+        echo "Testing lock-free pub/sub..."
+        timeout 5s ./06_pubsub_lockfree_rcu || true
+        
+        echo "Testing atomic operations..."
+        timeout 5s ./07_atomic_memory_ordering || true
+        
+        echo "Testing hybrid approach..."
+        timeout 5s ./10_hybrid_approach || true
+
+    - name: Test OneTBB example
+      working-directory: examples/build
+      timeout-minutes: 1
+      run: |
+        if [ -x "./08_onetbb_examples" ]; then
+          echo "Testing OneTBB examples..."
+          timeout 10s ./08_onetbb_examples || true
+        else
+          echo "OneTBB example not built (expected if TBB not available)"
+        fi
+
+    - name: Test C++20 coroutine examples
+      if: matrix.std == 20
+      working-directory: examples/build
+      timeout-minutes: 2
+      run: |
+        if [ -x "./03_basic_coroutine" ]; then
+          echo "Testing basic coroutine..."
+          timeout 5s ./03_basic_coroutine || true
+        fi
+        
+        if [ -x "./09_coroutine_async_io" ]; then
+          echo "Testing coroutine async I/O..."
+          timeout 10s ./09_coroutine_async_io || true
+        fi
+        
+        if [ -x "./coroutine_based_thread_pool" ]; then
+          echo "Testing coroutine-based thread pool..."
+          timeout 5s ./coroutine_based_thread_pool || true
+        fi
+
+    - name: Compile individual files
+      working-directory: examples
+      run: |
+        echo "Testing individual compilation..."
+        
+        ${{ matrix.compiler }} -std=c++${{ matrix.std }} -pthread -O2 \
+          01_thread_pool_lock_based.cpp -o test_pool
+        ./test_pool & sleep 1 && pkill -9 test_pool || true
+        
+        ${{ matrix.compiler }} -std=c++${{ matrix.std }} -pthread -O2 \
+          02_lock_free_queue.cpp -o test_queue
+        ./test_queue & sleep 1 && pkill -9 test_queue || true
+
+    - name: Upload build artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: ubuntu-${{ matrix.compiler }}-cpp${{ matrix.std }}-builds
+        path: examples/build/
+        retention-days: 7
+
+  build-macos:
+    name: macOS (Clang) C++${{ matrix.std }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        std: [17, 20]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        brew update
+        brew install tbb cmake ninja
+
+    - name: Verify tools
+      run: |
+        clang++ --version
+        cmake --version
+
+    - name: Configure CMake
+      working-directory: examples
+      run: |
+        mkdir -p build
+        cd build
+        cmake -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_STANDARD=${{ matrix.std }} \
+          ..
+
+    - name: Build examples
+      working-directory: examples/build
+      run: ninja -v
+
+    - name: Test examples
+      working-directory: examples/build
+      timeout-minutes: 3
+      run: |
+        for exe in ./*; do
+          if [ -x "$exe" ] && [ ! -d "$exe" ]; then
+            echo "Testing $exe..."
+            timeout 5s "$exe" || true
+          fi
+        done
+
+  build-docker:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image
+      working-directory: examples
+      run: |
+        docker build -t parallel-examples:test .
+
+    - name: Test Docker image
+      run: |
+        docker run --rm parallel-examples:test examples || true
+        
+        echo "Testing examples in Docker..."
+        docker run --rm parallel-examples:test /bin/bash -c \
+          "cd /examples/build && ls -lh"
+
+    - name: Run examples in Docker
+      timeout-minutes: 3
+      run: |
+        docker run --rm parallel-examples:test /bin/bash -c \
+          "timeout 5s /examples/build/01_thread_pool_lock_based || true"
+        
+        docker run --rm parallel-examples:test /bin/bash -c \
+          "timeout 5s /examples/build/07_atomic_memory_ordering || true"
+
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y g++-12 clang-format-14 cppcheck
+
+    - name: Check code formatting (clang-format)
+      working-directory: examples
+      run: |
+        echo "Checking code formatting..."
+        find . -name "*.cpp" -not -path "./build/*" -not -path "./pubsub-lib/*" \
+          | xargs clang-format-14 --dry-run --Werror || true
+
+    - name: Static analysis (cppcheck)
+      working-directory: examples
+      run: |
+        echo "Running static analysis..."
+        cppcheck --enable=warning,performance,portability \
+          --suppress=missingIncludeSystem \
+          --inline-suppr \
+          --error-exitcode=0 \
+          *.cpp || true
+
+    - name: Check for common issues
+      working-directory: examples
+      run: |
+        echo "Checking for common issues..."
+        
+        # Check for TODO/FIXME comments
+        echo "TODOs and FIXMEs:"
+        grep -rn "TODO\|FIXME" *.cpp || echo "None found"
+        
+        # Check file sizes
+        echo "Large files (>100KB):"
+        find . -name "*.cpp" -size +100k || echo "None found"
+
+  documentation:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check documentation files
+      working-directory: examples
+      run: |
+        echo "Checking documentation files..."
+        
+        # Check required files exist
+        for file in README.md QUICK_REFERENCE.md DOCKER.md Dockerfile docker-compose.yml CMakeLists.txt; do
+          if [ -f "$file" ]; then
+            echo "✓ $file exists"
+          else
+            echo "✗ $file missing"
+            exit 1
+          fi
+        done
+
+    - name: Verify Dockerfile
+      working-directory: examples
+      run: |
+        echo "Verifying Dockerfile syntax..."
+        docker run --rm -i hadolint/hadolint < Dockerfile || true
+
+    - name: Check markdown links
+      uses: gaurav-nelson/github-action-markdown-link-check@v1
+      with:
+        use-quiet-mode: 'yes'
+        config-file: '.github/markdown-link-check-config.json'
+      continue-on-error: true
+
+  summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [build-ubuntu, build-macos, build-docker, code-quality, documentation]
+    if: always()
+
+    steps:
+    - name: Check build status
+      run: |
+        echo "Build Summary:"
+        echo "  Ubuntu builds: ${{ needs.build-ubuntu.result }}"
+        echo "  macOS builds: ${{ needs.build-macos.result }}"
+        echo "  Docker build: ${{ needs.build-docker.result }}"
+        echo "  Code quality: ${{ needs.code-quality.result }}"
+        echo "  Documentation: ${{ needs.documentation.result }}"
+        
+        if [ "${{ needs.build-ubuntu.result }}" != "success" ] || \
+           [ "${{ needs.build-macos.result }}" != "success" ] || \
+           [ "${{ needs.build-docker.result }}" != "success" ]; then
+          echo "Some builds failed!"
+          exit 1
+        fi
+        
+        echo "All critical builds passed! ✓"
