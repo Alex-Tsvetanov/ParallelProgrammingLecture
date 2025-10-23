@@ -140,7 +140,7 @@ jobs:
 
     - name: Upload build artifacts
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ubuntu-${{ matrix.compiler }}-cpp${{ matrix.std }}-builds
         path: examples/build/
